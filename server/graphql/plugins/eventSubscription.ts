@@ -1,9 +1,8 @@
-import { makeExtendSchemaPlugin, gql } from 'postgraphile/utils';
-import { context, lambda, listen } from 'postgraphile/grafast';
-import { jsonParse } from 'postgraphile/@dataplan/json';
+import { makeExtendSchemaPlugin, gql } from "postgraphile/utils";
+import { context, lambda, listen } from "postgraphile/grafast";
+import { jsonParse } from "postgraphile/@dataplan/json";
 
 const MySubscriptionPlugin = makeExtendSchemaPlugin((build) => {
-  // const { messages } = build.input.pgRegistry.pgResources;
   return {
     typeDefs: /* GraphQL */ gql`
       extend type Subscription {
@@ -20,8 +19,8 @@ const MySubscriptionPlugin = makeExtendSchemaPlugin((build) => {
       Subscription: {
         forumMessage: {
           subscribePlan(_$root, args) {
-            const $pgSubscriber = context().get('pgSubscriber');
-            const $forumId = args.get('forumId');
+            const $pgSubscriber = context().get("pgSubscriber");
+            const $forumId = args.get("forumId");
             const $topic = lambda($forumId, (id) => `forum:${id}:message`);
             return listen($pgSubscriber, $topic, jsonParse);
           },
@@ -32,21 +31,17 @@ const MySubscriptionPlugin = makeExtendSchemaPlugin((build) => {
       },
       ForumMessageSubscriptionPayload: {
         event($event) {
-          return $event.get('event');
+          return $event.get("event");
         },
         sub($event) {
-          return $event.get('sub');
+          return $event.get("sub");
         },
         id($event) {
-          return $event.get('id');
+          return $event.get("id");
         },
       },
     },
   };
 });
 
-export const preset: GraphileConfig.Preset = {
-  plugins: [MySubscriptionPlugin],
-};
-
-export default preset;
+export default MySubscriptionPlugin;
