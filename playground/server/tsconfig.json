@@ -1,8 +1,0 @@
-{
-  "extends": "../.nuxt/tsconfig.server.json",
-  "compilerOptions": {
-    "moduleResolution": "bundler",
-    "module": "ESNext",
-    "allowSyntheticDefaultImports": true
-  }
-}
