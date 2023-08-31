@@ -5,5 +5,5 @@ export default eventHandler((event) => {
   if (getHeader(event, "accept") === "text/event-stream") {
     return serv.handleEventStreamEvent(event);
   }
-  return serv.handleGraphqlEvent(event);
+  return serv.handleEvent(event);
 });

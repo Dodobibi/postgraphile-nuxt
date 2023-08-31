@@ -2,7 +2,6 @@ import type { App, H3Event } from "h3";
 import {
   createRouter,
   eventHandler,
-  getHeader,
   getQuery,
   getRequestHeaders,
   getRequestProtocol,
@@ -13,12 +12,7 @@ import {
   setResponseStatus,
 } from "h3";
 
-import type { IncomingMessage, Server as HTTPServer } from "node:http";
-import type { Server as HTTPSServer } from "node:https";
-import type { Duplex } from "node:stream";
 import { PassThrough } from "node:stream";
-
-import { makeNodeUpgradeHandler } from "postgraphile/grafserv/node";
 
 import {
   convertHandlerResultToResult,
@@ -82,6 +76,39 @@ function getDigest(event: H3Event): RequestDigest {
 export class H3Grafserv extends GrafservBase {
   constructor(config: GrafservConfig) {
     super(config);
+  }
+
+  public async handleEvent(event: H3Event) {
+    const digest = getDigest(event);
+
+    const handlerResult = await this.graphqlHandler(
+      normalizeRequest(digest),
+      this.graphiqlHandler
+    );
+    const result = await convertHandlerResultToResult(handlerResult);
+    return this.send(event, result);
+  }
+
+  public async handleGraphiqlEvent(event: H3Event) {
+    const digest = getDigest(event);
+
+    const handlerResult = await this.graphiqlHandler(normalizeRequest(digest));
+    const result = await convertHandlerResultToResult(handlerResult);
+    return this.send(event, result);
+  }
+
+  public async handleEventStreamEvent(event: H3Event) {
+    const digest = getDigest(event);
+
+    const handlerResult: EventStreamHeandlerResult = {
+      type: "event-stream",
+      request: normalizeRequest(digest),
+      dynamicOptions: this.dynamicOptions,
+      payload: this.makeStream(),
+      statusCode: 200,
+    };
+    const result = await convertHandlerResultToResult(handlerResult);
+    return this.send(event, result);
   }
 
   public async send(event: H3Event, result: Result | null) {
@@ -174,124 +201,35 @@ export class H3Grafserv extends GrafservBase {
     }
   }
 
-  async getUpgradeHandler() {
-    if (this.resolvedPreset.grafserv?.websockets) {
-      return makeNodeUpgradeHandler(this);
-    } else {
-      return null;
-    }
-  }
-  shouldHandleUpgrade(req: IncomingMessage, _socket: Duplex, _head: Buffer) {
-    const fullUrl = req.url;
-    if (!fullUrl) {
-      return false;
-    }
-    const q = fullUrl.indexOf("?");
-    const url = q >= 0 ? fullUrl.substring(0, q) : fullUrl;
-    const graphqlPath = this.dynamicOptions.graphqlPath;
-    return url === graphqlPath;
-  }
-  public async addTo(
-    app: App,
-    server: HTTPServer | HTTPSServer | undefined,
-    addExclusiveWebsocketHandler = true
-  ) {
+  public async addTo(app: App) {
     const dynamicOptions = this.dynamicOptions;
 
     const router = createRouter();
+    app.use(router);
 
-    // register graphql path
     router.use(
       this.dynamicOptions.graphqlPath,
-      this.dynamicOptions.watch &&
-        this.dynamicOptions.graphqlPath === this.dynamicOptions.eventStreamPath
-        ? eventHandler(async (event) => {
-            if (getHeader(event, "accept") === "text/event-stream") {
-              return this.handleEventStreamEvent(event);
-            }
-            return this.handleGraphqlEvent(event);
-          })
-        : this.handleGraphqlEvent,
+      eventHandler(this.handleEvent),
       this.dynamicOptions.graphqlOverGET ||
-        this.dynamicOptions.graphiqlOnGraphQLGET ||
-        this.dynamicOptions.graphqlPath === this.dynamicOptions.eventStreamPath
+        this.dynamicOptions.graphiqlOnGraphQLGET
         ? ["get", "post"]
         : ["post"]
     );
 
-    // register graphiql path
-    if (
-      dynamicOptions.graphiql &&
-      this.dynamicOptions.graphqlPath !== this.dynamicOptions.graphiqlPath
-    ) {
-      router.get(this.dynamicOptions.graphiqlPath, this.handleGraphiqlEvent);
-    }
-
-    // register eventStream path
-    if (
-      dynamicOptions.watch &&
-      this.dynamicOptions.graphqlPath !== this.dynamicOptions.eventStreamPath
-    ) {
+    if (dynamicOptions.graphiql) {
       router.get(
-        this.dynamicOptions.eventStreamPath,
-        this.handleEventStreamEvent
+        this.dynamicOptions.graphiqlPath,
+        eventHandler(this.handleGraphiqlEvent)
       );
     }
 
-    app.use(router);
-
-    // register ws
-    if (addExclusiveWebsocketHandler && server) {
-      await this.attachWebsocketsToServer(server);
+    if (dynamicOptions.watch) {
+      router.get(
+        this.dynamicOptions.eventStreamPath,
+        eventHandler(this.handleEventStreamEvent)
+      );
     }
   }
-
-  public async attachWebsocketsToServer(server: HTTPServer | HTTPSServer) {
-    const grafservUpgradeHandler = await this.getUpgradeHandler();
-    if (grafservUpgradeHandler) {
-      const upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-        if (this.shouldHandleUpgrade(req, socket, head)) {
-          grafservUpgradeHandler(req, socket, head);
-        } else {
-          socket.destroy();
-        }
-      };
-      server.on("upgrade", upgrade);
-      this.onRelease(() => {
-        server.off("upgrade", upgrade);
-      });
-    }
-  }
-
-  /**
-   * Helpers for nuxt
-   */
-  public handleGraphqlEvent = eventHandler(async (event: H3Event) => {
-    const handlerResult = await this.graphqlHandler(
-      normalizeRequest(getDigest(event)),
-      this.graphiqlHandler
-    );
-    const result = await convertHandlerResultToResult(handlerResult);
-    return this.send(event, result);
-  });
-  public handleGraphiqlEvent = eventHandler(async (event: H3Event) => {
-    const handlerResult = await this.graphiqlHandler(
-      normalizeRequest(getDigest(event))
-    );
-    const result = await convertHandlerResultToResult(handlerResult);
-    return this.send(event, result);
-  });
-  public handleEventStreamEvent = eventHandler(async (event: H3Event) => {
-    const handlerResult: EventStreamHeandlerResult = {
-      type: "event-stream",
-      request: normalizeRequest(getDigest(event)),
-      dynamicOptions: this.dynamicOptions,
-      payload: this.makeStream(),
-      statusCode: 200,
-    };
-    const result = await convertHandlerResultToResult(handlerResult);
-    return this.send(event, result);
-  });
 }
 
 export function grafserv(config: GrafservConfig) {
