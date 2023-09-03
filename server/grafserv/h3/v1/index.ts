@@ -1,3 +1,6 @@
+import type { IncomingMessage, Server as HTTPServer } from "node:http";
+import type { Server as HTTPSServer } from "node:https";
+import type { Duplex } from "node:stream";
 import type { App, H3Event } from "h3";
 import {
   createRouter,
@@ -27,6 +30,8 @@ import type {
   RequestDigest,
   Result,
 } from "postgraphile/grafserv";
+
+import { makeNodeUpgradeHandler } from "postgraphile/grafserv/node";
 
 declare global {
   namespace Grafast {
@@ -78,7 +83,14 @@ export class H3Grafserv extends GrafservBase {
     super(config);
   }
 
+  /**
+   * @deprecated use handleGraphqlEvent instead
+   */
   public async handleEvent(event: H3Event) {
+    return this.handleGraphqlEvent(event);
+  }
+
+  public async handleGraphqlEvent(event: H3Event) {
     const digest = getDigest(event);
 
     const handlerResult = await this.graphqlHandler(
@@ -209,7 +221,7 @@ export class H3Grafserv extends GrafservBase {
 
     router.use(
       this.dynamicOptions.graphqlPath,
-      eventHandler(this.handleEvent),
+      eventHandler((event) => this.handleGraphqlEvent(event)),
       this.dynamicOptions.graphqlOverGET ||
         this.dynamicOptions.graphiqlOnGraphQLGET
         ? ["get", "post"]
@@ -219,15 +231,69 @@ export class H3Grafserv extends GrafservBase {
     if (dynamicOptions.graphiql) {
       router.get(
         this.dynamicOptions.graphiqlPath,
-        eventHandler(this.handleGraphiqlEvent)
+        eventHandler((event) => this.handleGraphiqlEvent(event))
       );
     }
 
     if (dynamicOptions.watch) {
       router.get(
         this.dynamicOptions.eventStreamPath,
-        eventHandler(this.handleEventStreamEvent)
+        eventHandler((event) => this.handleEventStreamEvent(event))
       );
+    }
+  }
+
+  async getUpgradeHandler_experimental() {
+    if (this.resolvedPreset.grafserv?.websockets) {
+      return makeNodeUpgradeHandler(this);
+    } else {
+      return null;
+    }
+  }
+
+  shouldHandleUpgrade_experimental(
+    req: IncomingMessage,
+    _socket: Duplex,
+    _head: Buffer
+  ) {
+    const fullUrl = req.url;
+    if (!fullUrl) {
+      return false;
+    }
+    const q = fullUrl.indexOf("?");
+    const url = q >= 0 ? fullUrl.substring(0, q) : fullUrl;
+    const graphqlPath = this.dynamicOptions.graphqlPath;
+    return url === graphqlPath;
+  }
+
+  public async addTo_experimental(
+    app: App,
+    server: HTTPServer | HTTPSServer | undefined,
+    addExclusiveWebsocketHandler = true
+  ) {
+    this.addTo(app);
+
+    if (addExclusiveWebsocketHandler && server) {
+      await this.attachWebsocketsToServer_experimental(server);
+    }
+  }
+
+  public async attachWebsocketsToServer_experimental(
+    server: HTTPServer | HTTPSServer
+  ) {
+    const grafservUpgradeHandler = await this.getUpgradeHandler_experimental();
+    if (grafservUpgradeHandler) {
+      const upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+        if (this.shouldHandleUpgrade_experimental(req, socket, head)) {
+          grafservUpgradeHandler(req, socket, head);
+        } else {
+          socket.destroy();
+        }
+      };
+      server.on("upgrade", upgrade);
+      this.onRelease(() => {
+        server.off("upgrade", upgrade);
+      });
     }
   }
 }

@@ -23,6 +23,17 @@ pnpm install
 yarn install
 ```
 
+## Exporting schema
+
+```bash
+# npm
+npm run export-schema
+# pnpm
+pnpm run export-schema
+# yarn
+yarn export-schema
+```
+
 ## H3 (standalone) & postgraphile with subscription ws
 
 Single h3 app (`h3Standalone.ts`)

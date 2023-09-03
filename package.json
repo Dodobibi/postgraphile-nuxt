@@ -7,10 +7,14 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "h3": "jiti h3Standalone.ts"
+    "h3": "node -r jiti/register -r dotenv/config h3Standalone.ts",
+    "export-schema": "node -r jiti/register -r dotenv/config export-schema.ts"
   },
   "devDependencies": {
     "@nuxt/devtools": "latest",
+    "dotenv": "^16.3.1",
+    "eslint-plugin-graphile-export": "0.0.2-beta.1",
+    "graphile-export": "0.0.2-beta.1",
     "jiti": "^1.19.3",
     "nuxt": "^3.7.0",
     "postgraphile": "5.0.0-beta.7"

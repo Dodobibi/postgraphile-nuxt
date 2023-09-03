@@ -15,12 +15,11 @@ const preset: GraphileConfig.Preset = {
       schemas: ["public"],
     }),
   ],
-
   grafserv: {
     graphiql: true,
     graphqlPath: "/api/graphql",
-    eventStreamPath: "/api/graphql",
-    graphiqlPath: "/api/graphql",
+    eventStreamPath: "/api/graphql/stream",
+    graphiqlPath: "/graphiql",
     graphiqlOnGraphQLGET: true,
     websockets: true,
     watch: true,

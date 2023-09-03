@@ -26,12 +26,12 @@ export default defineNuxtModule({
           }
         });
       });
-      addServerPlugin("@/server/graphql/ws-dev");
+      addServerPlugin("@/modules/grafserv/ws-dev");
     }
 
     /**
      * Register websockets in PRODUCTION.
      */
-    if (!nuxt.options.dev) addServerPlugin("@/server/graphql/ws");
+    if (!nuxt.options.dev) addServerPlugin("@/modules/grafserv/ws");
   },
 });

@@ -1,4 +1,4 @@
-import { serv } from "./serv";
+import { serv } from "@/server/grafserv/serv";
 
 export default defineNitroPlugin(async (nitroApp) => {
   // This hook (request) is new !!! (since h3@1.8.0 / nitro@2.6.1)
@@ -7,7 +7,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   nitroApp.hooks.hookOnce("request", (event: H3Event) => {
     const server = event.node.req.socket.server;
     if (server) {
-      serv.attachWebsocketsToServer(server);
+      serv.attachWebsocketsToServer_experimental(server);
     }
   });
   // TODO: Make a first request for handling this at startup (fetch http://*****)

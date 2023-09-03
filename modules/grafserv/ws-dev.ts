@@ -1,6 +1,6 @@
 import { Server } from "http";
 
-import { serv } from "./serv";
+import { serv } from "@/server/grafserv/serv";
 
 export default defineNitroPlugin(async (nitroApp) => {
   // Make a internal server for handling ws in runtime (isolated from buildtime)
@@ -18,5 +18,5 @@ export default defineNitroPlugin(async (nitroApp) => {
     );
   });
   // finally, attach ws to it !!!
-  serv.attachWebsocketsToServer(server);
+  serv.attachWebsocketsToServer_experimental(server);
 });
